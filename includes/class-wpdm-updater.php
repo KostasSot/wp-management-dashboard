@@ -140,7 +140,11 @@ class WPDM_Updater {
 			return $source;
 		}
 
-		$target = trailingslashit( $remote_source ) . 'wp-dashboard-management/';
+		// Match whatever folder the plugin is actually installed in (manual
+		// GitHub-zip installs may use "<repo>-main"), so the update replaces
+		// the existing folder instead of creating a second copy.
+		$installed_dir = dirname( plugin_basename( WPDM_PLUGIN_FILE ) );
+		$target        = trailingslashit( $remote_source ) . trailingslashit( $installed_dir );
 		if ( untrailingslashit( $source ) === untrailingslashit( $target ) ) {
 			return $source;
 		}

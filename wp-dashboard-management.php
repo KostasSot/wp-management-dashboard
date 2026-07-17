@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       WP Dashboard Management
  * Description:       A site management dashboard: plugin update overview, active/inactive status, PHP error logs, WordPress & PHP environment info, and Beqlic Activity Log integration with charts.
- * Version:           1.2.0
+ * Version:           1.2.1
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Konstantinos Sotiriou
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; // No direct access.
 }
 
-define( 'WPDM_VERSION', '1.2.0' );
+define( 'WPDM_VERSION', '1.2.1' );
 define( 'WPDM_PLUGIN_FILE', __FILE__ );
 define( 'WPDM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPDM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
