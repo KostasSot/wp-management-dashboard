@@ -4,7 +4,7 @@ A modular site-management dashboard for WordPress. One admin screen ("Management
 
 Every module is optional. A setup wizard lets you choose per site which modules are enabled, so a client site can run a slim read-only dashboard while your dev box gets the full toolkit.
 
-- **Version:** 1.0.0
+- **Version:** 1.2.0
 - **Author:** Konstantinos Sotiriou
 - **Requires:** WordPress 5.8+, PHP 7.4+
 - **License:** GPL-2.0-or-later
@@ -39,6 +39,7 @@ All modules are chosen in the setup wizard. Disabled modules are removed from th
 | **Security Health Check** | Read-only hardening checklist with a fix hint per failure: HTTPS, `DISALLOW_FILE_EDIT`, no "admin" username, core version not flagged insecure on wordpress.org, PHP errors not displayed publicly, custom table prefix, XML-RPC disabled, open registration disabled, `wp-config.php` permissions. |
 | **Site Health Summary** | Runs WordPress core's `WP_Site_Health` direct tests and shows good/recommended/critical counts, critical issues first. Cached 15 minutes ("Re-run tests" forces a refresh) because some core tests make loopback HTTP requests. |
 | **Activity Log (Beqlic)** | Integration with the Beqlic Activity Log plugin: events-per-day bar chart, severity & top-action donuts, most-active-users list, and the 10 latest events (charts are dependency-free canvas). If Beqlic is installed but inactive → one-click **Activate**. If not installed → one-click **Install now from GitHub** (downloads the repo zip, installs via core's `Plugin_Upgrader`, activates). |
+| **Email Update Reports** | Scheduled email (daily/weekly/monthly, or disabled) to a configurable address with the core version + pending core update and the available updates for **active plugins and all themes**, as a styled HTML table. "Send report now" for on-demand sends. Delivered via WP-Cron and `wp_mail()` — on real sites pair it with an SMTP plugin so mail actually leaves the server. |
 | **Debug Mode Toggle** | One Enable/Disable switch in the Environment panel. **Enable** sets `WP_DEBUG = true`, `WP_DEBUG_LOG = true`, `WP_DEBUG_DISPLAY = false` (log errors, never print them on the site). **Disable** turns all three off. Edits `wp-config.php` surgically, keeps a backup at `wp-config.php.wpdm-bak`, and invalidates OPcache so the change is visible immediately. |
 
 ### Power Tools (development/staging sites)
@@ -60,19 +61,30 @@ Also always visible (no module needed): stat cards (WordPress version + core upd
 
 | Constant | Default | Purpose |
 |---|---|---|
+| `WPDM_GITHUB_REPO` | *(empty)* | GitHub repo (`owner/name`) this plugin **updates itself from**. When set, the plugin compares its version against the `Version:` header on the repo's `main` branch and offers the update through the normal WordPress update UI. Empty disables self-updates. |
 | `WPDM_BEQLIC_REPO_ZIP` | `https://github.com/Becliq-Devs/beqlic-activity-log/archive/refs/heads/main.zip` | Zip URL the Beqlic installer downloads. Point at a release asset for versioned installs. |
 
 ### Filters
 
 | Filter | Purpose |
 |---|---|
+| `wpdm_github_repo` | Override the self-update repository at runtime. |
 | `wpdm_beqlic_repo_zip` | Override the Beqlic download URL at runtime. |
+
+### Release workflow
+
+1. Make changes and **bump the version** in `wp-dashboard-management.php` (both the `Version:` header and `WPDM_VERSION`) and `readme.txt` (`Stable tag`).
+2. Push to the repo's `main` branch.
+3. Sites check GitHub every 6 hours (or immediately via the dashboard's "Check for updates" button) and offer the new version on the Plugins/Updates screens and in this plugin's own table — one-click update as usual.
+
+If you forget the version bump, sites will never see the release — the check is purely `version_compare()` against the header.
 
 ### Stored data
 
 | Where | What |
 |---|---|
-| Option `wpdm_settings` | Feature flags + wizard-completed marker. |
+| Option `wpdm_settings` | Feature flags, wizard-completed marker, report email + frequency. |
+| Cron event `wpdm_send_report` | Scheduled report delivery (cleared on deactivation). |
 | Site transient `wpdm_core_versions` | Cached wordpress.org release list (12 h). |
 | Transient `wpdm_site_health` | Cached Site Health results (15 min). |
 | `uploads/wpdm-logs/` | Plugin PHP error log (+ `.1` rotation). |

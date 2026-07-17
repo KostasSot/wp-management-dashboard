@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       WP Dashboard Management
  * Description:       A site management dashboard: plugin update overview, active/inactive status, PHP error logs, WordPress & PHP environment info, and Beqlic Activity Log integration with charts.
- * Version:           1.0.0
+ * Version:           1.2.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Konstantinos Sotiriou
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; // No direct access.
 }
 
-define( 'WPDM_VERSION', '1.0.0' );
+define( 'WPDM_VERSION', '1.2.0' );
 define( 'WPDM_PLUGIN_FILE', __FILE__ );
 define( 'WPDM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WPDM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -26,6 +26,14 @@ define( 'WPDM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
  * GitHub zip the Beqlic Activity Log plugin is installed from when missing.
  * Point this at the repo's zip download (branch or release asset).
  */
+/**
+ * GitHub repository ("owner/name") this plugin updates itself from.
+ * Leave empty to disable the self-update check.
+ */
+if ( ! defined( 'WPDM_GITHUB_REPO' ) ) {
+	define( 'WPDM_GITHUB_REPO', 'KostasSot/wp-management-dashboard' );
+}
+
 if ( ! defined( 'WPDM_BEQLIC_REPO_ZIP' ) ) {
 	define( 'WPDM_BEQLIC_REPO_ZIP', 'https://github.com/Becliq-Devs/beqlic-activity-log/archive/refs/heads/main.zip' );
 }
@@ -42,6 +50,8 @@ require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-config.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-export.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-security-check.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-site-health.php';
+require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-updater.php';
+require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-email-report.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-php-logs.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-activity-log.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-admin.php';
@@ -56,6 +66,8 @@ function wpdm_init() {
 	WPDM_Wizard::init();
 	WPDM_Ajax::init();
 	WPDM_Export::init();
+	WPDM_Updater::init();
+	WPDM_Email_Report::init();
 }
 add_action( 'plugins_loaded', 'wpdm_init' );
 
@@ -66,3 +78,11 @@ function wpdm_activate() {
 	set_transient( 'wpdm_activation_redirect', 1, 60 );
 }
 register_activation_hook( __FILE__, 'wpdm_activate' );
+
+/**
+ * On deactivation, remove the scheduled report event.
+ */
+function wpdm_deactivate() {
+	wp_clear_scheduled_hook( 'wpdm_send_report' );
+}
+register_deactivation_hook( __FILE__, 'wpdm_deactivate' );

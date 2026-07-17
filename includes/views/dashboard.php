@@ -364,6 +364,40 @@ if ( ! defined( 'ABSPATH' ) ) {
 	</div>
 	<?php endif; ?>
 
+	<!-- ===== Email reports ===== -->
+	<?php if ( $features['email_reports'] ) : ?>
+	<div class="wpdm-panel">
+		<div class="wpdm-panel-head">
+			<h2><?php esc_html_e( 'Email Update Reports', 'wp-dashboard-management' ); ?></h2>
+			<button type="button" class="button" id="wpdm-send-report">
+				<span class="dashicons dashicons-email-alt"></span>
+				<?php esc_html_e( 'Send report now', 'wp-dashboard-management' ); ?>
+			</button>
+		</div>
+		<p class="wpdm-muted">
+			<?php esc_html_e( 'A styled email with the WordPress core version and the pending updates for active plugins and themes.', 'wp-dashboard-management' ); ?>
+			<?php if ( $report_next ) : ?>
+				<?php
+				/* translators: %s: date/time of next report */
+				printf( esc_html__( 'Next scheduled report: %s.', 'wp-dashboard-management' ), esc_html( wp_date( 'j F Y, H:i', $report_next ) ) );
+				?>
+			<?php endif; ?>
+		</p>
+		<div class="wpdm-report-form">
+			<label for="wpdm-report-email"><?php esc_html_e( 'Send to', 'wp-dashboard-management' ); ?></label>
+			<input type="email" id="wpdm-report-email" class="regular-text" value="<?php echo esc_attr( $report['email'] ); ?>" placeholder="reports@example.com" />
+			<label for="wpdm-report-frequency"><?php esc_html_e( 'Frequency', 'wp-dashboard-management' ); ?></label>
+			<select id="wpdm-report-frequency">
+				<option value="disabled" <?php selected( $report['frequency'], 'disabled' ); ?>><?php esc_html_e( 'Disabled', 'wp-dashboard-management' ); ?></option>
+				<option value="daily" <?php selected( $report['frequency'], 'daily' ); ?>><?php esc_html_e( 'Daily', 'wp-dashboard-management' ); ?></option>
+				<option value="weekly" <?php selected( $report['frequency'], 'weekly' ); ?>><?php esc_html_e( 'Weekly', 'wp-dashboard-management' ); ?></option>
+				<option value="monthly" <?php selected( $report['frequency'], 'monthly' ); ?>><?php esc_html_e( 'Monthly', 'wp-dashboard-management' ); ?></option>
+			</select>
+			<button type="button" class="button button-primary" id="wpdm-save-report"><?php esc_html_e( 'Save settings', 'wp-dashboard-management' ); ?></button>
+		</div>
+	</div>
+	<?php endif; ?>
+
 	<!-- ===== Database snapshots ===== -->
 	<?php if ( $features['snapshots'] ) : ?>
 	<div class="wpdm-panel">

@@ -28,6 +28,8 @@ class WPDM_Ajax {
 		add_action( 'wp_ajax_wpdm_restore_backup', array( __CLASS__, 'restore_backup' ) );
 		add_action( 'wp_ajax_wpdm_delete_backup', array( __CLASS__, 'delete_backup' ) );
 		add_action( 'wp_ajax_wpdm_toggle_debug', array( __CLASS__, 'toggle_debug' ) );
+		add_action( 'wp_ajax_wpdm_save_report_settings', array( __CLASS__, 'save_report_settings' ) );
+		add_action( 'wp_ajax_wpdm_send_report_now', array( __CLASS__, 'send_report_now' ) );
 	}
 
 	/**
@@ -158,6 +160,49 @@ class WPDM_Ajax {
 					: __( 'Debug mode disabled.', 'wp-dashboard-management' ),
 			)
 		);
+	}
+
+	/**
+	 * Save email-report settings and reschedule the cron event.
+	 */
+	public static function save_report_settings() {
+		self::guard( 'email_reports' );
+
+		$email     = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
+		$frequency = isset( $_POST['frequency'] ) ? sanitize_key( wp_unslash( $_POST['frequency'] ) ) : 'disabled';
+
+		if ( 'disabled' !== $frequency && ! is_email( $email ) ) {
+			wp_send_json_error( array( 'message' => __( 'Please enter a valid email address.', 'wp-dashboard-management' ) ) );
+		}
+
+		WPDM_Settings::save_report_settings( $email, $frequency );
+		WPDM_Email_Report::reschedule();
+
+		$next = WPDM_Email_Report::next_run();
+		wp_send_json_success(
+			array(
+				'message' => $next
+					/* translators: %s: date/time of next report */
+					? sprintf( __( 'Report settings saved. Next report: %s.', 'wp-dashboard-management' ), wp_date( 'j F Y, H:i', $next ) )
+					: __( 'Report settings saved. Scheduled reports are disabled.', 'wp-dashboard-management' ),
+			)
+		);
+	}
+
+	/**
+	 * Send a report immediately (to the saved address).
+	 */
+	public static function send_report_now() {
+		self::guard( 'email_reports' );
+
+		$result = WPDM_Email_Report::send();
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		}
+
+		$report = WPDM_Settings::report_settings();
+		/* translators: %s: email address */
+		wp_send_json_success( array( 'message' => sprintf( __( 'Report sent to %s.', 'wp-dashboard-management' ), $report['email'] ) ) );
 	}
 
 	/**

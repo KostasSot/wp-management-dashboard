@@ -84,6 +84,7 @@ class WPDM_Plugins_Status {
 		}
 		delete_site_transient( 'update_plugins' );
 		delete_site_transient( 'update_themes' );
+		WPDM_Updater::flush_cache();
 		wp_update_plugins();
 		wp_update_themes();
 		wp_version_check( array(), true );

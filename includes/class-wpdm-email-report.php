@@ -1,0 +1,247 @@
+<?php
+/**
+ * Scheduled email update reports.
+ *
+ * Sends an HTML report — WordPress core version (and pending core update),
+ * plus available updates for active plugins and all themes — to a
+ * configurable address on a daily/weekly/monthly schedule via WP-Cron.
+ *
+ * @package WP_Dashboard_Management
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+class WPDM_Email_Report {
+
+	const CRON_HOOK = 'wpdm_send_report';
+
+	/**
+	 * Register hooks.
+	 */
+	public static function init() {
+		add_action( self::CRON_HOOK, array( __CLASS__, 'send' ) );
+		add_filter( 'cron_schedules', array( __CLASS__, 'add_monthly_schedule' ) ); // phpcs:ignore WordPress.WP.CronInterval
+	}
+
+	/**
+	 * Valid frequencies (value => cron recurrence).
+	 *
+	 * @return array
+	 */
+	public static function frequencies() {
+		return array(
+			'disabled' => '',
+			'daily'    => 'daily',
+			'weekly'   => 'weekly',
+			'monthly'  => 'wpdm_monthly',
+		);
+	}
+
+	/**
+	 * Add a ~monthly recurrence (WP-Cron has none built in).
+	 *
+	 * @param array $schedules Registered schedules.
+	 * @return array
+	 */
+	public static function add_monthly_schedule( $schedules ) {
+		$schedules['wpdm_monthly'] = array(
+			'interval' => 30 * DAY_IN_SECONDS,
+			'display'  => __( 'Once a month (every 30 days)', 'wp-dashboard-management' ),
+		);
+		return $schedules;
+	}
+
+	/**
+	 * (Re)schedule the cron event to match the saved settings.
+	 */
+	public static function reschedule() {
+		wp_clear_scheduled_hook( self::CRON_HOOK );
+
+		$report = WPDM_Settings::report_settings();
+		$map    = self::frequencies();
+
+		if ( 'disabled' === $report['frequency'] || empty( $map[ $report['frequency'] ] ) || ! is_email( $report['email'] ) ) {
+			return;
+		}
+
+		$intervals = array(
+			'daily'   => DAY_IN_SECONDS,
+			'weekly'  => WEEK_IN_SECONDS,
+			'monthly' => 30 * DAY_IN_SECONDS,
+		);
+
+		wp_schedule_event(
+			time() + $intervals[ $report['frequency'] ],
+			$map[ $report['frequency'] ],
+			self::CRON_HOOK
+		);
+	}
+
+	/**
+	 * Next scheduled run, if any.
+	 *
+	 * @return int 0 when nothing is scheduled.
+	 */
+	public static function next_run() {
+		$ts = wp_next_scheduled( self::CRON_HOOK );
+		return $ts ? (int) $ts : 0;
+	}
+
+	/**
+	 * Collect the report data.
+	 *
+	 * @return array
+	 */
+	public static function data() {
+		// Make sure update info is reasonably fresh before reporting.
+		if ( ! function_exists( 'wp_version_check' ) ) {
+			require_once ABSPATH . 'wp-includes/update.php';
+		}
+		wp_version_check();
+		wp_update_plugins();
+		wp_update_themes();
+
+		$system = WPDM_System_Info::get();
+
+		$plugins = array();
+		foreach ( WPDM_Plugins_Status::get_all() as $plugin ) {
+			if ( $plugin['active'] && $plugin['update_available'] ) {
+				$plugins[] = $plugin;
+			}
+		}
+
+		$themes = array();
+		foreach ( WPDM_Themes_Status::get_all() as $theme ) {
+			if ( $theme['update_available'] ) {
+				$themes[] = $theme;
+			}
+		}
+
+		return array(
+			'site'    => get_bloginfo( 'name' ),
+			'url'     => site_url(),
+			'system'  => $system,
+			'plugins' => $plugins,
+			'themes'  => $themes,
+		);
+	}
+
+	/**
+	 * Send the report to the configured address.
+	 *
+	 * @param string $override_email Optional recipient override (test sends).
+	 * @return true|WP_Error
+	 */
+	public static function send( $override_email = '' ) {
+		if ( ! WPDM_Settings::enabled( 'email_reports' ) ) {
+			return new WP_Error( 'wpdm_reports_disabled', __( 'The email reports module is disabled.', 'wp-dashboard-management' ) );
+		}
+
+		$report = WPDM_Settings::report_settings();
+		$email  = ( is_string( $override_email ) && is_email( $override_email ) ) ? $override_email : $report['email'];
+
+		if ( ! is_email( $email ) ) {
+			return new WP_Error( 'wpdm_no_email', __( 'No valid report email address is configured.', 'wp-dashboard-management' ) );
+		}
+
+		$data    = self::data();
+		$pending = count( $data['plugins'] ) + count( $data['themes'] ) + ( $data['system']['wp_needs_update'] ? 1 : 0 );
+
+		$subject = sprintf(
+			/* translators: 1: site name, 2: pending update count */
+			__( '[%1$s] Update report — %2$d update(s) pending', 'wp-dashboard-management' ),
+			$data['site'],
+			$pending
+		);
+
+		$sent = wp_mail(
+			$email,
+			$subject,
+			self::render_html( $data ),
+			array( 'Content-Type: text/html; charset=UTF-8' )
+		);
+
+		if ( ! $sent ) {
+			return new WP_Error( 'wpdm_mail_failed', __( 'wp_mail() could not send the report (check the site\'s mail configuration).', 'wp-dashboard-management' ) );
+		}
+
+		return true;
+	}
+
+	/**
+	 * The HTML report body (inline styles — email clients ignore stylesheets).
+	 *
+	 * @param array $data Report data from data().
+	 * @return string
+	 */
+	public static function render_html( array $data ) {
+		$system = $data['system'];
+
+		$table_open = '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 24px;">';
+		$th         = 'style="background:#365F91;color:#ffffff;text-align:left;padding:8px 12px;font-size:13px;"';
+		$td         = 'style="padding:8px 12px;border-bottom:1px solid #e8ebee;font-size:13px;color:#333333;"';
+		$badge_ok   = 'style="color:#00801a;font-weight:bold;"';
+		$badge_warn = 'style="color:#b45309;font-weight:bold;"';
+
+		$html  = '<div style="background:#f4f5f7;padding:24px;font-family:Arial,Helvetica,sans-serif;">';
+		$html .= '<div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:8px;padding:32px;">';
+
+		$html .= '<h1 style="color:#1E395B;font-size:20px;margin:0 0 4px;">' . esc_html__( 'WordPress Update Report', 'wp-dashboard-management' ) . '</h1>';
+		$html .= '<p style="color:#666666;font-size:13px;margin:0 0 24px;">'
+			. esc_html( $data['site'] ) . ' &middot; <a href="' . esc_url( $data['url'] ) . '" style="color:#365F91;">' . esc_html( $data['url'] ) . '</a>'
+			. ' &middot; ' . esc_html( wp_date( 'j F Y, H:i' ) ) . '</p>';
+
+		// Core.
+		$html .= '<h2 style="color:#1E395B;font-size:15px;margin:0 0 8px;">' . esc_html__( 'WordPress Core', 'wp-dashboard-management' ) . '</h2>';
+		$html .= $table_open;
+		$html .= '<tr><th ' . $th . '>' . esc_html__( 'Current Version', 'wp-dashboard-management' ) . '</th><th ' . $th . '>' . esc_html__( 'Status', 'wp-dashboard-management' ) . '</th></tr>';
+		$html .= '<tr><td ' . $td . '>' . esc_html( $system['wp_version'] ) . '</td><td ' . $td . '>';
+		if ( $system['wp_needs_update'] ) {
+			/* translators: %s: version number */
+			$html .= '<span ' . $badge_warn . '>' . sprintf( esc_html__( 'Update available: %s', 'wp-dashboard-management' ), esc_html( $system['wp_latest'] ) ) . '</span>';
+		} else {
+			$html .= '<span ' . $badge_ok . '>' . esc_html__( 'Up to date', 'wp-dashboard-management' ) . '</span>';
+		}
+		$html .= '</td></tr></table>';
+
+		// Plugins & themes sections share a layout.
+		$sections = array(
+			array(
+				'title' => __( 'Active Plugins With Updates', 'wp-dashboard-management' ),
+				'first' => __( 'Plugin', 'wp-dashboard-management' ),
+				'items' => $data['plugins'],
+				'empty' => __( 'All active plugins are up to date.', 'wp-dashboard-management' ),
+			),
+			array(
+				'title' => __( 'Themes With Updates', 'wp-dashboard-management' ),
+				'first' => __( 'Theme', 'wp-dashboard-management' ),
+				'items' => $data['themes'],
+				'empty' => __( 'All themes are up to date.', 'wp-dashboard-management' ),
+			),
+		);
+
+		foreach ( $sections as $section ) {
+			$html .= '<h2 style="color:#1E395B;font-size:15px;margin:0 0 8px;">' . esc_html( $section['title'] ) . '</h2>';
+			if ( empty( $section['items'] ) ) {
+				$html .= '<p style="font-size:13px;margin:0 0 24px;"><span ' . $badge_ok . '>' . esc_html( $section['empty'] ) . '</span></p>';
+				continue;
+			}
+			$html .= $table_open;
+			$html .= '<tr><th ' . $th . '>' . esc_html( $section['first'] ) . '</th><th ' . $th . '>' . esc_html__( 'Current', 'wp-dashboard-management' ) . '</th><th ' . $th . '>' . esc_html__( 'Available', 'wp-dashboard-management' ) . '</th></tr>';
+			foreach ( $section['items'] as $item ) {
+				$html .= '<tr><td ' . $td . '>' . esc_html( $item['name'] ) . '</td>'
+					. '<td ' . $td . '>' . esc_html( $item['version'] ) . '</td>'
+					. '<td ' . $td . '><span ' . $badge_warn . '>' . esc_html( $item['new_version'] ) . '</span></td></tr>';
+			}
+			$html .= '</table>';
+		}
+
+		$html .= '<p style="color:#999999;font-size:11px;margin:24px 0 0;">'
+			. esc_html__( 'Sent by the WP Dashboard Management plugin.', 'wp-dashboard-management' ) . '</p>';
+		$html .= '</div></div>';
+
+		return $html;
+	}
+}

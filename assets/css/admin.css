@@ -259,6 +259,19 @@
 	gap: 8px;
 }
 
+/* ===== Email reports ===== */
+.wpdm-report-form {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+
+.wpdm-report-form label {
+	font-weight: 600;
+	font-size: 13px;
+}
+
 /* ===== Security / site health ===== */
 .wpdm-columns-even {
 	grid-template-columns: 1fr 1fr;

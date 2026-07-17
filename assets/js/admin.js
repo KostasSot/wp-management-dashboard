@@ -97,6 +97,45 @@
 	bindAjaxButton( 'wpdm-install-beqlic', 'wpdm_install_beqlic', true );
 	bindAjaxButton( 'wpdm-create-backup', 'wpdm_create_backup', true );
 
+	/* ===== Email reports ===== */
+
+	var saveReportBtn = document.getElementById( 'wpdm-save-report' );
+	if ( saveReportBtn ) {
+		saveReportBtn.addEventListener( 'click', function () {
+			saveReportBtn.disabled = true;
+			post(
+				'wpdm_save_report_settings',
+				function ( json ) {
+					var msg = json.data && json.data.message ? json.data.message : wpdmData.i18n.error;
+					notice( msg, json.success ? 'success' : 'error' );
+					saveReportBtn.disabled = false;
+				},
+				{
+					email: document.getElementById( 'wpdm-report-email' ).value,
+					frequency: document.getElementById( 'wpdm-report-frequency' ).value
+				}
+			);
+		} );
+	}
+
+	var sendReportBtn = document.getElementById( 'wpdm-send-report' );
+	if ( sendReportBtn ) {
+		sendReportBtn.addEventListener( 'click', function () {
+			sendReportBtn.disabled = true;
+			var original = sendReportBtn.innerHTML;
+			sendReportBtn.textContent = wpdmData.i18n.working;
+			post(
+				'wpdm_send_report_now',
+				function ( json ) {
+					var msg = json.data && json.data.message ? json.data.message : wpdmData.i18n.error;
+					notice( msg, json.success ? 'success' : 'error' );
+					sendReportBtn.disabled = false;
+					sendReportBtn.innerHTML = original;
+				}
+			);
+		} );
+	}
+
 	/* ===== Debug mode toggle ===== */
 
 	var debugBtn = document.getElementById( 'wpdm-toggle-debug' );

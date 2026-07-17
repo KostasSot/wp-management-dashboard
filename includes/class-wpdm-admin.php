@@ -139,6 +139,8 @@ class WPDM_Admin {
 		$core_versions   = $features['core_switch'] && current_user_can( 'update_core' ) ? WPDM_Core_Manager::available_versions() : array();
 		$snapshots       = $features['snapshots'] ? WPDM_DB_Backup::get_list() : array();
 		$security        = $features['security'] ? WPDM_Security_Check::summary() : array();
+		$report          = $features['email_reports'] ? WPDM_Settings::report_settings() : array();
+		$report_next     = $features['email_reports'] ? WPDM_Email_Report::next_run() : 0;
 		$health_refresh  = isset( $_GET['wpdm-health'] ) && 'refresh' === $_GET['wpdm-health']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$site_health     = $features['site_health'] ? WPDM_Site_Health::results( $health_refresh ) : array();
 

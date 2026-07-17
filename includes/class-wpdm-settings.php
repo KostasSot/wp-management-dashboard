@@ -59,6 +59,11 @@ class WPDM_Settings {
 				'description' => __( 'WordPress core\'s own Site Health tests summarized on the dashboard, critical issues first.', 'wp-dashboard-management' ),
 				'group'       => 'monitoring',
 			),
+			'email_reports' => array(
+				'label'       => __( 'Email Update Reports', 'wp-dashboard-management' ),
+				'description' => __( 'Scheduled email report of the core version and pending plugin/theme updates, sent daily, weekly, or monthly.', 'wp-dashboard-management' ),
+				'group'       => 'monitoring',
+			),
 			'debug_toggle' => array(
 				'label'       => __( 'Debug Mode Toggle', 'wp-dashboard-management' ),
 				'description' => __( 'Switch WP_DEBUG logging on/off from the Environment panel (edits wp-config.php).', 'wp-dashboard-management' ),
@@ -91,6 +96,10 @@ class WPDM_Settings {
 		$defaults = array(
 			'features'       => array_fill_keys( array_keys( self::features() ), true ),
 			'setup_complete' => false,
+			'report'         => array(
+				'email'     => get_option( 'admin_email' ),
+				'frequency' => 'disabled',
+			),
 		);
 
 		$settings             = wp_parse_args( $saved, $defaults );
@@ -98,8 +107,37 @@ class WPDM_Settings {
 			is_array( $settings['features'] ) ? $settings['features'] : array(),
 			$defaults['features']
 		);
+		$settings['report']   = wp_parse_args(
+			is_array( $settings['report'] ) ? $settings['report'] : array(),
+			$defaults['report']
+		);
 
 		return $settings;
+	}
+
+	/**
+	 * Report settings (email + frequency).
+	 *
+	 * @return array{email:string,frequency:string}
+	 */
+	public static function report_settings() {
+		$settings = self::get();
+		return $settings['report'];
+	}
+
+	/**
+	 * Save the report settings, preserving everything else.
+	 *
+	 * @param string $email     Recipient address.
+	 * @param string $frequency One of WPDM_Email_Report::frequencies() keys.
+	 */
+	public static function save_report_settings( $email, $frequency ) {
+		$settings           = self::get();
+		$settings['report'] = array(
+			'email'     => sanitize_email( $email ),
+			'frequency' => array_key_exists( $frequency, WPDM_Email_Report::frequencies() ) ? $frequency : 'disabled',
+		);
+		update_option( self::OPTION, $settings );
 	}
 
 	/**
@@ -134,12 +172,10 @@ class WPDM_Settings {
 			$features[ $key ] = in_array( $key, $enabled_keys, true );
 		}
 
-		update_option(
-			self::OPTION,
-			array(
-				'features'       => $features,
-				'setup_complete' => true,
-			)
-		);
+		$settings                   = self::get();
+		$settings['features']       = $features;
+		$settings['setup_complete'] = true;
+
+		update_option( self::OPTION, $settings );
 	}
 }
