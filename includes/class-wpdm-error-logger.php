@@ -94,6 +94,7 @@ class WPDM_Error_Logger {
 
 		if ( $error && in_array( $error['type'], $fatals, true ) ) {
 			self::write( self::level_label( $error['type'] ), $error['message'], $error['file'], $error['line'] );
+			WPDM_Fatal_Alert::maybe_send( $error );
 		}
 	}
 

@@ -143,6 +143,22 @@
 .wpdm-severity-warning { background: #fcf3e0; color: #996800; }
 .wpdm-severity-critical { background: #fcebec; color: #b32d2e; }
 
+.wpdm-vuln-critical,
+.wpdm-vuln-high { background: #fcebec; color: #b32d2e; }
+.wpdm-vuln-medium { background: #fcf3e0; color: #996800; }
+.wpdm-vuln-low { background: #e8f0fa; color: #135e96; }
+
+.wpdm-version-cell .wpdm-rollback-btn {
+	display: block;
+	font-size: 12px;
+}
+
+.wpdm-rollback-form {
+	display: flex;
+	gap: 4px;
+	margin-top: 4px;
+}
+
 /* ===== Activity charts ===== */
 .wpdm-activity-grid {
 	display: grid;

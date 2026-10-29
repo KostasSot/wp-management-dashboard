@@ -96,6 +96,14 @@
 	bindAjaxButton( 'wpdm-activate-beqlic', 'wpdm_activate_beqlic', true );
 	bindAjaxButton( 'wpdm-install-beqlic', 'wpdm_install_beqlic', true );
 	bindAjaxButton( 'wpdm-create-backup', 'wpdm_create_backup', true );
+	bindAjaxButton( 'wpdm-run-scans', 'wpdm_run_scans', true );
+
+	var scanBtn = document.getElementById( 'wpdm-run-scans' );
+	if ( scanBtn ) {
+		scanBtn.addEventListener( 'click', function () {
+			notice( wpdmData.i18n.scanning, 'info' );
+		} );
+	}
 
 	/* ===== Email reports ===== */
 
@@ -164,6 +172,7 @@
 
 	var FIX_CONFIRMS = {
 		xmlrpc: wpdmData.i18n.confirmXmlrpc,
+		salts: wpdmData.i18n.confirmSalts,
 		search_engine_visibility: wpdmData.i18n.confirmIndexing
 	};
 
@@ -309,6 +318,77 @@
 					btn.textContent = wpdmData.i18n.error;
 				},
 				{ plugin: btn.dataset.plugin, enable: btn.dataset.enable }
+			);
+		} );
+	} );
+
+	function installPluginVersion( btn, select, installBtn ) {
+		var version = select.value;
+		if ( ! window.confirm( wpdmData.i18n.confirmRollback.replace( '%1$s', version ).replace( '%2$s', btn.dataset.name ) ) ) {
+			return;
+		}
+		select.disabled = true;
+		installBtn.disabled = true;
+		installBtn.textContent = wpdmData.i18n.working;
+		post(
+			'wpdm_rollback_plugin',
+			function ( json ) {
+				var msg = json.data && json.data.message ? json.data.message : wpdmData.i18n.error;
+				notice( msg, json.success ? 'success' : 'error' );
+				if ( json.success ) {
+					window.location.reload();
+					return;
+				}
+				select.disabled = false;
+				installBtn.disabled = false;
+				installBtn.textContent = wpdmData.i18n.install;
+			},
+			{ plugin: btn.dataset.plugin, version: version }
+		);
+	}
+
+	document.querySelectorAll( '.wpdm-rollback-btn' ).forEach( function ( btn ) {
+		btn.addEventListener( 'click', function () {
+			btn.disabled = true;
+			btn.textContent = wpdmData.i18n.working;
+			post(
+				'wpdm_plugin_versions',
+				function ( json ) {
+					if ( ! json.success ) {
+						notice( json.data && json.data.message ? json.data.message : wpdmData.i18n.error, 'error' );
+						btn.textContent = wpdmData.i18n.error;
+						return;
+					}
+
+					var form = document.createElement( 'span' );
+					form.className = 'wpdm-rollback-form';
+					var select = document.createElement( 'select' );
+					json.data.versions.forEach( function ( version ) {
+						var option = document.createElement( 'option' );
+						option.value = version;
+						option.textContent = version === btn.dataset.version ? version + ' — ' + wpdmData.i18n.current : version;
+						option.disabled = version === btn.dataset.version;
+						select.appendChild( option );
+					} );
+					// Preselect the newest release that is not the installed one.
+					var firstFree = select.querySelector( 'option:not([disabled])' );
+					if ( firstFree ) {
+						select.value = firstFree.value;
+					}
+
+					var installBtn = document.createElement( 'button' );
+					installBtn.type = 'button';
+					installBtn.className = 'button button-small';
+					installBtn.textContent = wpdmData.i18n.install;
+					installBtn.addEventListener( 'click', function () {
+						installPluginVersion( btn, select, installBtn );
+					} );
+
+					form.appendChild( select );
+					form.appendChild( installBtn );
+					btn.replaceWith( form );
+				},
+				{ plugin: btn.dataset.plugin }
 			);
 		} );
 	} );

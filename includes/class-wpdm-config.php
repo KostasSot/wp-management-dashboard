@@ -19,7 +19,27 @@ class WPDM_Config {
 	 *
 	 * @var string[]
 	 */
-	const ALLOWED = array( 'WP_DEBUG', 'WP_DEBUG_LOG', 'WP_DEBUG_DISPLAY', 'DISALLOW_FILE_EDIT' );
+	const ALLOWED = array(
+		'WP_DEBUG',
+		'WP_DEBUG_LOG',
+		'WP_DEBUG_DISPLAY',
+		'DISALLOW_FILE_EDIT',
+		'AUTH_KEY',
+		'SECURE_AUTH_KEY',
+		'LOGGED_IN_KEY',
+		'NONCE_KEY',
+		'AUTH_SALT',
+		'SECURE_AUTH_SALT',
+		'LOGGED_IN_SALT',
+		'NONCE_SALT',
+	);
+
+	/**
+	 * Secret keys and salts (string values).
+	 *
+	 * @var string[]
+	 */
+	const SALTS = array( 'AUTH_KEY', 'SECURE_AUTH_KEY', 'LOGGED_IN_KEY', 'NONCE_KEY', 'AUTH_SALT', 'SECURE_AUTH_SALT', 'LOGGED_IN_SALT', 'NONCE_SALT' );
 
 	/**
 	 * Locate wp-config.php (it may live one level above ABSPATH).
@@ -62,11 +82,9 @@ class WPDM_Config {
 			'WP_DEBUG_DISPLAY' => false,
 		);
 
-		foreach ( $flags as $name => $value ) {
-			$result = self::set_constant( $name, $value );
-			if ( is_wp_error( $result ) ) {
-				return $result;
-			}
+		$result = self::set_constants( $flags );
+		if ( is_wp_error( $result ) ) {
+			return $result;
 		}
 
 		if ( $on ) {
@@ -157,18 +175,33 @@ class WPDM_Config {
 	/**
 	 * Set a whitelisted constant in wp-config.php.
 	 *
-	 * Values are booleans; WP_DEBUG_LOG also accepts a file path.
-	 *
 	 * @param string      $name  Constant name (must be in ALLOWED).
 	 * @param bool|string $value New value.
 	 * @return true|WP_Error
 	 */
 	public static function set_constant( $name, $value ) {
-		if ( ! in_array( $name, self::ALLOWED, true ) ) {
-			return new WP_Error( 'wpdm_const_not_allowed', __( 'This constant cannot be changed from the dashboard.', 'wp-dashboard-management' ) );
-		}
-		if ( ! is_bool( $value ) && ! ( 'WP_DEBUG_LOG' === $name && is_string( $value ) && '' !== $value ) ) {
-			return new WP_Error( 'wpdm_const_invalid', __( 'Invalid value for this constant.', 'wp-dashboard-management' ) );
+		return self::set_constants( array( $name => $value ) );
+	}
+
+	/**
+	 * Set several whitelisted constants in one write (one backup, no
+	 * half-applied state if a later value is invalid).
+	 *
+	 * Values are booleans; WP_DEBUG_LOG also accepts a file path and the
+	 * secret keys/salts take strings.
+	 *
+	 * @param array $values Constant name => bool|string.
+	 * @return true|WP_Error
+	 */
+	public static function set_constants( array $values ) {
+		foreach ( $values as $name => $value ) {
+			if ( ! in_array( $name, self::ALLOWED, true ) ) {
+				return new WP_Error( 'wpdm_const_not_allowed', __( 'This constant cannot be changed from the dashboard.', 'wp-dashboard-management' ) );
+			}
+			$takes_string = 'WP_DEBUG_LOG' === $name || in_array( $name, self::SALTS, true );
+			if ( ! is_bool( $value ) && ! ( $takes_string && is_string( $value ) && '' !== $value ) ) {
+				return new WP_Error( 'wpdm_const_invalid', __( 'Invalid value for this constant.', 'wp-dashboard-management' ) );
+			}
 		}
 
 		$path = self::path();
@@ -184,37 +217,12 @@ class WPDM_Config {
 			return new WP_Error( 'wpdm_config_unreadable', __( 'wp-config.php could not be read.', 'wp-dashboard-management' ) );
 		}
 
-		$literal = is_bool( $value ) ? ( $value ? 'true' : 'false' ) : var_export( $value, true ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions
-		$line    = "define( '{$name}', {$literal} );";
-		$pattern = '/define\(\s*([\'"])' . preg_quote( $name, '/' ) . '\1\s*,\s*.+?\s*\)\s*;/';
-		// Callbacks keep "$1" or "\" in a path from being read as backreferences.
-		$replace = static function () use ( $line ) {
-			return $line;
-		};
-
-		if ( preg_match( $pattern, $contents ) ) {
-			$updated = preg_replace_callback( $pattern, $replace, $contents, 1 );
-		} else {
-			// Constant not defined yet: insert it before the stop-editing marker,
-			// or after the opening tag as a fallback.
-			$marker = '/* That\'s all, stop editing!';
-			$pos    = strpos( $contents, $marker );
-			if ( false !== $pos ) {
-				$updated = substr_replace( $contents, $line . "\n\n", $pos, 0 );
-			} else {
-				$updated = preg_replace_callback(
-					'/^<\?php\s*/',
-					static function () use ( $line ) {
-						return "<?php\n" . $line . "\n";
-					},
-					$contents,
-					1
-				);
+		$updated = $contents;
+		foreach ( $values as $name => $value ) {
+			$updated = self::replace_define( $updated, $name, $value );
+			if ( null === $updated || '' === $updated ) {
+				return new WP_Error( 'wpdm_config_edit_failed', __( 'The configuration edit failed.', 'wp-dashboard-management' ) );
 			}
-		}
-
-		if ( null === $updated || '' === $updated ) {
-			return new WP_Error( 'wpdm_config_edit_failed', __( 'The configuration edit failed.', 'wp-dashboard-management' ) );
 		}
 
 		// Keep a backup of the pre-edit file.
@@ -231,5 +239,45 @@ class WPDM_Config {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Rewrite (or insert) one define() in the config source.
+	 *
+	 * @param string      $contents wp-config.php source.
+	 * @param string      $name     Constant name.
+	 * @param bool|string $value    New value.
+	 * @return string|null Null on regex failure.
+	 */
+	private static function replace_define( $contents, $name, $value ) {
+		$literal = is_bool( $value ) ? ( $value ? 'true' : 'false' ) : var_export( $value, true ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions
+		$line    = "define( '{$name}', {$literal} );";
+		// Quoted values are matched whole: salts often contain ");".
+		$pattern = '/define\(\s*([\'"])' . preg_quote( $name, '/' ) . '\1\s*,\s*(?:\'(?:[^\'\\\\]|\\\\.)*\'|"(?:[^"\\\\]|\\\\.)*"|.+?)\s*\)\s*;/';
+		// Callbacks keep "$1" or "\" in a path from being read as backreferences.
+		$replace = static function () use ( $line ) {
+			return $line;
+		};
+
+		if ( preg_match( $pattern, $contents ) ) {
+			return preg_replace_callback( $pattern, $replace, $contents, 1 );
+		}
+
+		// Constant not defined yet: insert it before the stop-editing marker,
+		// or after the opening tag as a fallback.
+		$marker = '/* That\'s all, stop editing!';
+		$pos    = strpos( $contents, $marker );
+		if ( false !== $pos ) {
+			return substr_replace( $contents, $line . "\n\n", $pos, 0 );
+		}
+
+		return preg_replace_callback(
+			'/^<\?php\s*/',
+			static function () use ( $line ) {
+				return "<?php\n" . $line . "\n";
+			},
+			$contents,
+			1
+		);
 	}
 }

@@ -163,6 +163,25 @@ class WPDM_DB_Backup {
 	}
 
 	/**
+	 * Delete all but the newest snapshots carrying a label.
+	 *
+	 * @param string $label Label passed to create().
+	 * @param int    $keep  How many to keep.
+	 */
+	public static function prune( $label, $keep ) {
+		$files = glob( self::dir() . '/snapshot-*-' . sanitize_key( $label ) . '.sql' );
+		if ( empty( $files ) ) {
+			return;
+		}
+
+		// Filenames start with a sortable UTC timestamp.
+		rsort( $files );
+		foreach ( array_slice( $files, max( 0, (int) $keep ) ) as $path ) {
+			@unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions
+		}
+	}
+
+	/**
 	 * Validate a snapshot filename and return its full path.
 	 *
 	 * @param string $file Snapshot filename (no path).

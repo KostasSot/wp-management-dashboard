@@ -20,12 +20,67 @@ class WPDM_Security_Check {
 	const XMLRPC_OPTION = 'wpdm_disable_xmlrpc';
 
 	/**
+	 * Option that blocks anonymous user enumeration when set by "Fix".
+	 */
+	const USER_ENUM_OPTION = 'wpdm_block_user_enum';
+
+	/**
+	 * Cached loopback probe results (they cost HTTP requests).
+	 */
+	const PROBES_KEY = 'wpdm_security_probes';
+	const PROBES_TTL = 12 * HOUR_IN_SECONDS;
+
+	/**
 	 * Register hooks for hardening applied through fix().
 	 */
 	public static function init() {
 		if ( get_option( self::XMLRPC_OPTION ) ) {
 			add_filter( 'xmlrpc_enabled', '__return_false' );
 		}
+		if ( get_option( self::USER_ENUM_OPTION ) ) {
+			add_filter( 'rest_endpoints', array( __CLASS__, 'hide_user_endpoints' ) );
+			add_action( 'template_redirect', array( __CLASS__, 'block_author_scan' ), 1 );
+			add_filter( 'wp_sitemaps_add_provider', array( __CLASS__, 'drop_user_sitemap' ), 10, 2 );
+		}
+	}
+
+	/**
+	 * Remove the users REST routes for anonymous requests.
+	 *
+	 * @param array $endpoints Registered routes.
+	 * @return array
+	 */
+	public static function hide_user_endpoints( $endpoints ) {
+		if ( is_user_logged_in() ) {
+			return $endpoints;
+		}
+		foreach ( array_keys( $endpoints ) as $route ) {
+			if ( 0 === strpos( $route, '/wp/v2/users' ) ) {
+				unset( $endpoints[ $route ] );
+			}
+		}
+		return $endpoints;
+	}
+
+	/**
+	 * Stop ?author=N from redirecting anonymous visitors to /author/<login>/.
+	 */
+	public static function block_author_scan() {
+		if ( ! is_user_logged_in() && isset( $_GET['author'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			wp_safe_redirect( home_url( '/' ), 301 );
+			exit;
+		}
+	}
+
+	/**
+	 * Drop the users sitemap, which lists every author slug.
+	 *
+	 * @param WP_Sitemaps_Provider|false $provider Provider instance.
+	 * @param string                     $name     Provider name.
+	 * @return WP_Sitemaps_Provider|false
+	 */
+	public static function drop_user_sitemap( $provider, $name ) {
+		return 'users' === $name ? false : $provider;
 	}
 
 	/**
@@ -119,6 +174,51 @@ class WPDM_Security_Check {
 			);
 		}
 
+		$checks[] = array(
+			'id'      => 'salts',
+			'label'   => __( 'Unique secret keys and salts in wp-config.php', 'wp-dashboard-management' ),
+			'pass'    => self::salts_strong(),
+			'fixable' => true,
+			'detail'  => __( 'One or more secret keys are missing, left at the default, or too short, so WordPress falls back to keys stored in the database. Fix generates new keys — everyone, including you, is logged out.', 'wp-dashboard-management' ),
+		);
+
+		$probes = self::probes();
+		if ( null !== $probes['user_enum'] ) {
+			$checks[] = array(
+				'id'      => 'user_enum',
+				'label'   => __( 'Usernames not exposed to visitors', 'wp-dashboard-management' ),
+				'pass'    => ! $probes['user_enum'],
+				'fixable' => true,
+				'detail'  => __( 'Anonymous visitors can list usernames through /wp-json/wp/v2/users or ?author=1. Fix blocks both (and the users sitemap) for logged-out visitors.', 'wp-dashboard-management' ),
+			);
+		}
+		if ( null !== $probes['dir_listing'] ) {
+			$checks[] = array(
+				'id'     => 'dir_listing',
+				'label'  => __( 'Directory listing disabled for uploads', 'wp-dashboard-management' ),
+				'pass'   => ! $probes['dir_listing'],
+				'detail' => __( 'The web server lists the files in wp-content/uploads/. Add "Options -Indexes" to .htaccess (Apache) or "autoindex off;" (Nginx).', 'wp-dashboard-management' ),
+			);
+		}
+
+		$inactive_plugins = self::inactive_plugins();
+		$checks[]         = array(
+			'id'     => 'inactive_plugins',
+			'label'  => __( 'No inactive plugins installed', 'wp-dashboard-management' ),
+			'pass'   => empty( $inactive_plugins ),
+			/* translators: %s: comma-separated plugin names */
+			'detail' => sprintf( __( 'Inactive plugins still ship code that can be attacked directly. Delete the ones you do not need: %s', 'wp-dashboard-management' ), implode( ', ', $inactive_plugins ) ),
+		);
+
+		$inactive_themes = self::inactive_themes();
+		$checks[]        = array(
+			'id'     => 'inactive_themes',
+			'label'  => __( 'At most one inactive (fallback) theme', 'wp-dashboard-management' ),
+			'pass'   => count( $inactive_themes ) <= 1,
+			/* translators: %s: comma-separated theme names */
+			'detail' => sprintf( __( 'Keep one default theme as a fallback and delete the rest: %s', 'wp-dashboard-management' ), implode( ', ', $inactive_themes ) ),
+		);
+
 		foreach ( $checks as $i => $check ) {
 			$checks[ $i ] += array( 'fixable' => false );
 		}
@@ -155,6 +255,17 @@ class WPDM_Security_Check {
 				break;
 			case 'registration':
 				$result = update_option( 'users_can_register', 0 );
+				break;
+			case 'salts':
+				$salts = array();
+				foreach ( WPDM_Config::SALTS as $name ) {
+					$salts[ $name ] = wp_generate_password( 64, true, true );
+				}
+				$result = WPDM_Config::set_constants( $salts );
+				break;
+			case 'user_enum':
+				$result = update_option( self::USER_ENUM_OPTION, 1 );
+				delete_transient( self::PROBES_KEY );
 				break;
 			case 'config_perms':
 				$path   = WPDM_Config::path();
@@ -249,6 +360,112 @@ class WPDM_Security_Check {
 			'total'  => count( $checks ),
 			'checks' => $checks,
 		);
+	}
+
+	/**
+	 * Whether every secret key/salt is defined in wp-config.php with a real value.
+	 *
+	 * wp_salt() silently falls back to keys in the database for missing,
+	 * default, or duplicated constants; those leak with any database dump.
+	 *
+	 * @return bool
+	 */
+	private static function salts_strong() {
+		$seen = array();
+		foreach ( WPDM_Config::SALTS as $name ) {
+			$value = defined( $name ) ? (string) constant( $name ) : '';
+			if ( strlen( $value ) < 32 || 'put your unique phrase here' === $value || isset( $seen[ $value ] ) ) {
+				return false;
+			}
+			$seen[ $value ] = true;
+		}
+		return true;
+	}
+
+	/**
+	 * Loopback probes, as anonymous visitors see the site.
+	 *
+	 * @return array{user_enum:bool|null,dir_listing:bool|null} true = exposed,
+	 *         null = could not be determined (e.g. loopback blocked).
+	 */
+	private static function probes() {
+		$cached = get_transient( self::PROBES_KEY );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+
+		$args = array(
+			'timeout'     => 5,
+			'redirection' => 0,
+			// Same as core's loopback tests: local certs are often self-signed.
+			'sslverify'   => apply_filters( 'https_local_ssl_verify', false ),
+		);
+
+		$rest   = wp_remote_get( rest_url( 'wp/v2/users' ), $args );
+		$users  = is_wp_error( $rest ) ? null : json_decode( wp_remote_retrieve_body( $rest ), true );
+		$admins = get_users(
+			array(
+				'role'   => 'administrator',
+				'number' => 1,
+				'fields' => 'ID',
+			)
+		);
+		$author = $admins ? wp_remote_get( add_query_arg( 'author', (int) $admins[0], home_url( '/' ) ), $args ) : new WP_Error( 'wpdm_no_admin' );
+
+		if ( is_wp_error( $rest ) && is_wp_error( $author ) ) {
+			$user_enum = null;
+		} else {
+			$rest_exposed   = ! is_wp_error( $rest ) && 200 === wp_remote_retrieve_response_code( $rest ) && is_array( $users ) && ! empty( $users );
+			$author_exposed = ! is_wp_error( $author ) && false !== strpos( (string) wp_remote_retrieve_header( $author, 'location' ), '/author/' );
+			$user_enum      = $rest_exposed || $author_exposed;
+		}
+
+		$uploads = wp_upload_dir( null, false );
+		$listing = wp_remote_get( trailingslashit( $uploads['baseurl'] ), $args );
+		$dir     = is_wp_error( $listing )
+			? null
+			: 200 === wp_remote_retrieve_response_code( $listing ) && false !== stripos( wp_remote_retrieve_body( $listing ), 'Index of' );
+
+		$probes = array(
+			'user_enum'   => $user_enum,
+			'dir_listing' => $dir,
+		);
+		set_transient( self::PROBES_KEY, $probes, self::PROBES_TTL );
+
+		return $probes;
+	}
+
+	/**
+	 * Names of installed but inactive plugins.
+	 *
+	 * @return string[]
+	 */
+	private static function inactive_plugins() {
+		if ( ! function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		$names = array();
+		foreach ( get_plugins() as $file => $data ) {
+			if ( ! is_plugin_active( $file ) ) {
+				$names[] = $data['Name'];
+			}
+		}
+		return $names;
+	}
+
+	/**
+	 * Names of inactive themes, excluding the active theme's parent.
+	 *
+	 * @return string[]
+	 */
+	private static function inactive_themes() {
+		$names = array();
+		foreach ( wp_get_themes() as $stylesheet => $theme ) {
+			if ( get_stylesheet() !== $stylesheet && get_template() !== $stylesheet ) {
+				$names[] = $theme->get( 'Name' );
+			}
+		}
+		return $names;
 	}
 
 	/**

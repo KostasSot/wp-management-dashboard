@@ -120,11 +120,17 @@ class WPDM_Email_Report {
 		}
 
 		return array(
-			'site'    => get_bloginfo( 'name' ),
-			'url'     => site_url(),
-			'system'  => $system,
-			'plugins' => $plugins,
-			'themes'  => $themes,
+			'site'            => get_bloginfo( 'name' ),
+			'url'             => site_url(),
+			'system'          => $system,
+			'plugins'         => $plugins,
+			'themes'          => $themes,
+			// Optional sections: null when their module is disabled.
+			'security'        => WPDM_Settings::enabled( 'security' ) ? WPDM_Security_Check::summary() : null,
+			'site_health'     => WPDM_Settings::enabled( 'site_health' ) ? WPDM_Site_Health::results() : null,
+			'php_errors'      => WPDM_Settings::enabled( 'php_logs' ) ? WPDM_PHP_Logs::counts_since( time() - DAY_IN_SECONDS ) : null,
+			'vulnerabilities' => WPDM_Settings::enabled( 'vulnerabilities' ) ? WPDM_Vulnerabilities::results() : null,
+			'abandoned'       => WPDM_Settings::enabled( 'abandoned' ) ? WPDM_Abandoned_Plugins::results() : null,
 		);
 	}
 
@@ -155,6 +161,12 @@ class WPDM_Email_Report {
 			$data['site'],
 			$pending
 		);
+
+		$vulnerable = null === $data['vulnerabilities'] ? 0 : count( $data['vulnerabilities']['items'] );
+		if ( $vulnerable ) {
+			/* translators: %d: number of vulnerable components */
+			$subject .= ' · ' . sprintf( __( '%d vulnerable component(s)', 'wp-dashboard-management' ), $vulnerable );
+		}
 
 		$sent = wp_mail(
 			$email,
@@ -238,9 +250,120 @@ class WPDM_Email_Report {
 			$html .= '</table>';
 		}
 
+		$html .= self::render_health_sections( $data, $th, $td, $table_open, $badge_ok, $badge_warn );
+
 		$html .= '<p style="color:#999999;font-size:11px;margin:24px 0 0;">'
 			. esc_html__( 'Sent by the WP Dashboard Management plugin.', 'wp-dashboard-management' ) . '</p>';
 		$html .= '</div></div>';
+
+		return $html;
+	}
+
+	/**
+	 * Security, Site Health, PHP error, vulnerability, and abandoned-plugin
+	 * sections. Each appears only when its module is enabled.
+	 *
+	 * @param array  $data       Report data from data().
+	 * @param string $th         Header cell style attribute.
+	 * @param string $td         Body cell style attribute.
+	 * @param string $table_open Opening table tag.
+	 * @param string $badge_ok   "Good" text style attribute.
+	 * @param string $badge_warn "Attention" text style attribute.
+	 * @return string
+	 */
+	private static function render_health_sections( array $data, $th, $td, $table_open, $badge_ok, $badge_warn ) {
+		$h2   = '<h2 style="color:#1E395B;font-size:15px;margin:0 0 8px;">';
+		$p    = '<p style="font-size:13px;margin:0 0 24px;">';
+		$html = '';
+
+		// Cells are pre-escaped HTML; headers are plain text.
+		$table = static function ( array $headers, array $rows ) use ( $th, $td, $table_open ) {
+			$out = $table_open . '<tr>';
+			foreach ( $headers as $header ) {
+				$out .= '<th ' . $th . '>' . esc_html( $header ) . '</th>';
+			}
+			$out .= '</tr>';
+			foreach ( $rows as $row ) {
+				$out .= '<tr>';
+				foreach ( $row as $cell ) {
+					$out .= '<td ' . $td . '>' . $cell . '</td>';
+				}
+				$out .= '</tr>';
+			}
+			return $out . '</table>';
+		};
+
+		if ( null !== $data['security'] ) {
+			$security = $data['security'];
+			$html    .= $h2 . esc_html__( 'Security Health Check', 'wp-dashboard-management' ) . '</h2>';
+			$failing  = wp_list_filter( $security['checks'], array( 'pass' => false ) );
+			if ( empty( $failing ) ) {
+				/* translators: %d: number of checks */
+				$html .= $p . '<span ' . $badge_ok . '>' . esc_html( sprintf( __( 'All %d checks passed.', 'wp-dashboard-management' ), $security['total'] ) ) . '</span></p>';
+			} else {
+				$rows = array();
+				foreach ( $failing as $check ) {
+					$rows[] = array( '<span ' . $badge_warn . '>' . esc_html( $check['label'] ) . '</span>' );
+				}
+				/* translators: 1: passed count, 2: total count */
+				$html .= $table( array( sprintf( __( 'Failing checks (%1$d / %2$d passed)', 'wp-dashboard-management' ), $security['passed'], $security['total'] ) ), $rows );
+			}
+		}
+
+		if ( null !== $data['site_health'] ) {
+			$counts = $data['site_health']['counts'];
+			$style  = $counts['critical'] ? $badge_warn : $badge_ok;
+			$html  .= $h2 . esc_html__( 'Site Health', 'wp-dashboard-management' ) . '</h2>';
+			/* translators: 1: good count, 2: recommended count, 3: critical count */
+			$html .= $p . '<span ' . $style . '>' . esc_html( sprintf( __( '%1$d good · %2$d recommended · %3$d critical', 'wp-dashboard-management' ), $counts['good'], $counts['recommended'], $counts['critical'] ) ) . '</span></p>';
+		}
+
+		if ( null !== $data['php_errors'] ) {
+			$errors = $data['php_errors'];
+			$style  = $errors['fatal'] ? $badge_warn : $badge_ok;
+			$html  .= $h2 . esc_html__( 'PHP Errors (last 24 hours)', 'wp-dashboard-management' ) . '</h2>';
+			/* translators: 1: fatal count, 2: warning count, 3: notice count, 4: deprecated count */
+			$html .= $p . '<span ' . $style . '>' . esc_html( sprintf( __( '%1$d fatal · %2$d warnings · %3$d notices · %4$d deprecated', 'wp-dashboard-management' ), $errors['fatal'], $errors['warning'], $errors['notice'], $errors['deprecated'] ) ) . '</span></p>';
+		}
+
+		if ( null !== $data['vulnerabilities'] ) {
+			$html .= $h2 . esc_html__( 'Known Vulnerabilities', 'wp-dashboard-management' ) . '</h2>';
+			if ( ! $data['vulnerabilities']['checked_at'] ) {
+				$html .= $p . esc_html__( 'Not scanned yet.', 'wp-dashboard-management' ) . '</p>';
+			} elseif ( empty( $data['vulnerabilities']['items'] ) ) {
+				$html .= $p . '<span ' . $badge_ok . '>' . esc_html__( 'No known vulnerabilities in installed versions.', 'wp-dashboard-management' ) . '</span></p>';
+			} else {
+				$rows = array();
+				foreach ( $data['vulnerabilities']['items'] as $item ) {
+					foreach ( $item['vulns'] as $vuln ) {
+						$rows[] = array(
+							esc_html( $item['name'] . ' ' . $item['version'] ),
+							'<span ' . $badge_warn . '>' . esc_html( $vuln['title'] ) . '</span>',
+							esc_html( $vuln['fixed_in'] ? $vuln['fixed_in'] : __( 'No fix yet', 'wp-dashboard-management' ) ),
+						);
+					}
+				}
+				$html .= $table( array( __( 'Component', 'wp-dashboard-management' ), __( 'Issue', 'wp-dashboard-management' ), __( 'Fixed in', 'wp-dashboard-management' ) ), $rows );
+			}
+		}
+
+		if ( null !== $data['abandoned'] ) {
+			$html .= $h2 . esc_html__( 'Abandoned Plugins', 'wp-dashboard-management' ) . '</h2>';
+			if ( ! $data['abandoned']['checked_at'] ) {
+				$html .= $p . esc_html__( 'Not scanned yet.', 'wp-dashboard-management' ) . '</p>';
+			} elseif ( empty( $data['abandoned']['plugins'] ) ) {
+				$html .= $p . '<span ' . $badge_ok . '>' . esc_html__( 'No closed or abandoned plugins.', 'wp-dashboard-management' ) . '</span></p>';
+			} else {
+				$rows = array();
+				foreach ( $data['abandoned']['plugins'] as $plugin ) {
+					$rows[] = array(
+						esc_html( $plugin['name'] ),
+						'<span ' . $badge_warn . '>' . esc_html( WPDM_Abandoned_Plugins::label( $plugin ) ) . '</span>',
+					);
+				}
+				$html .= $table( array( __( 'Plugin', 'wp-dashboard-management' ), __( 'Status', 'wp-dashboard-management' ) ), $rows );
+			}
+		}
 
 		return $html;
 	}

@@ -20,7 +20,7 @@ class WPDM_Settings {
 	/**
 	 * All selectable features.
 	 *
-	 * @return array key => array{label:string,description:string,group:string}
+	 * @return array key => array{label:string,description:string,group:string,default?:bool}
 	 */
 	public static function features() {
 		return array(
@@ -64,6 +64,22 @@ class WPDM_Settings {
 				'description' => __( 'Scheduled email report of the core version and pending plugin/theme updates, sent daily, weekly, or monthly.', 'wp-dashboard-management' ),
 				'group'       => 'monitoring',
 			),
+			'fatal_alerts' => array(
+				'label'       => __( 'Fatal Error Alerts', 'wp-dashboard-management' ),
+				'description' => __( 'Email the report address (admin email by default) when a PHP fatal error happens. At most one email per hour.', 'wp-dashboard-management' ),
+				'group'       => 'monitoring',
+			),
+			'abandoned'    => array(
+				'label'       => __( 'Abandoned Plugin Detection', 'wp-dashboard-management' ),
+				'description' => __( 'Daily check against wordpress.org for plugins that were closed or not updated in over two years.', 'wp-dashboard-management' ),
+				'group'       => 'monitoring',
+			),
+			'vulnerabilities' => array(
+				'label'       => __( 'Vulnerability Scan', 'wp-dashboard-management' ),
+				'description' => __( 'Daily check of core, plugins, and themes against the WPVulnerability.net database. Sends component slugs and the WordPress version to that third-party service.', 'wp-dashboard-management' ),
+				'group'       => 'monitoring',
+				'default'     => false,
+			),
 			'debug_toggle' => array(
 				'label'       => __( 'Debug Mode Toggle', 'wp-dashboard-management' ),
 				'description' => __( 'Switch WP_DEBUG logging on/off from the Environment panel (edits wp-config.php).', 'wp-dashboard-management' ),
@@ -77,6 +93,17 @@ class WPDM_Settings {
 			'snapshots'    => array(
 				'label'       => __( 'Database Snapshots', 'wp-dashboard-management' ),
 				'description' => __( 'Create, restore, and delete full database snapshots; automatic snapshot before version switches.', 'wp-dashboard-management' ),
+				'group'       => 'power',
+			),
+			'update_snapshots' => array(
+				'label'       => __( 'Snapshot Before Updates', 'wp-dashboard-management' ),
+				'description' => __( 'Take a database snapshot before plugin and theme updates (including auto-updates). Keeps the newest five. Needs disk space for full dumps.', 'wp-dashboard-management' ),
+				'group'       => 'power',
+				'default'     => false,
+			),
+			'plugin_rollback' => array(
+				'label'       => __( 'Plugin Version Rollback', 'wp-dashboard-management' ),
+				'description' => __( 'Install any earlier wordpress.org release of a plugin. Takes a database snapshot first when snapshots are enabled.', 'wp-dashboard-management' ),
 				'group'       => 'power',
 			),
 		);
@@ -94,7 +121,13 @@ class WPDM_Settings {
 		}
 
 		$defaults = array(
-			'features'       => array_fill_keys( array_keys( self::features() ), true ),
+			// Modules are on unless they opt out with 'default' => false.
+			'features'       => array_map(
+				function ( $feature ) {
+					return ! isset( $feature['default'] ) || $feature['default'];
+				},
+				self::features()
+			),
 			'setup_complete' => false,
 			'report'         => array(
 				'email'     => get_option( 'admin_email' ),

@@ -46,12 +46,17 @@ require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-plugins-status.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-themes-status.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-core-manager.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-db-backup.php';
+require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-update-snapshots.php';
+require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-plugin-rollback.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-config.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-export.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-security-check.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-site-health.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-updater.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-email-report.php';
+require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-fatal-alert.php';
+require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-vulnerabilities.php';
+require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-abandoned-plugins.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-php-logs.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-activity-log.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-admin.php';
@@ -69,6 +74,14 @@ function wpdm_init() {
 	WPDM_Updater::init();
 	WPDM_Email_Report::init();
 	WPDM_Security_Check::init();
+	WPDM_Update_Snapshots::init();
+	WPDM_Vulnerabilities::init();
+	WPDM_Abandoned_Plugins::init();
+
+	if ( defined( 'WP_CLI' ) && WP_CLI ) {
+		require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-cli.php';
+		WPDM_CLI::register();
+	}
 }
 add_action( 'plugins_loaded', 'wpdm_init' );
 
@@ -81,9 +94,11 @@ function wpdm_activate() {
 register_activation_hook( __FILE__, 'wpdm_activate' );
 
 /**
- * On deactivation, remove the scheduled report event.
+ * On deactivation, remove the scheduled events.
  */
 function wpdm_deactivate() {
 	wp_clear_scheduled_hook( 'wpdm_send_report' );
+	wp_clear_scheduled_hook( 'wpdm_vulnerability_scan' );
+	wp_clear_scheduled_hook( 'wpdm_abandoned_scan' );
 }
 register_deactivation_hook( __FILE__, 'wpdm_deactivate' );

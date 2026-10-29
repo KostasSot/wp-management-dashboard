@@ -121,7 +121,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 								<strong><?php echo esc_html( $plugin['name'] ); ?></strong>
 								<div class="wpdm-muted"><?php echo esc_html( $plugin['author'] ); ?></div>
 							</td>
-							<td><?php echo esc_html( $plugin['version'] ); ?></td>
+							<td class="wpdm-version-cell">
+								<?php echo esc_html( $plugin['version'] ); ?>
+								<?php if ( $features['plugin_rollback'] && current_user_can( 'update_plugins' ) && WPDM_Plugin_Rollback::supports( $plugin['file'] ) ) { ?>
+									<button type="button" class="button-link wpdm-rollback-btn"
+										data-plugin="<?php echo esc_attr( $plugin['file'] ); ?>"
+										data-name="<?php echo esc_attr( $plugin['name'] ); ?>"
+										data-version="<?php echo esc_attr( $plugin['version'] ); ?>">
+										<?php esc_html_e( 'Other versions', 'wp-dashboard-management' ); ?>
+									</button>
+								<?php } ?>
+							</td>
 							<td>
 								<?php if ( $plugin['active'] ) : ?>
 									<span class="wpdm-badge wpdm-badge-green"><?php esc_html_e( 'Active', 'wp-dashboard-management' ); ?></span>
@@ -369,6 +379,117 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<?php endif; ?>
 	</div>
 	<?php endif; ?>
+
+	<?php if ( null !== $vulnerabilities || null !== $abandoned ) { ?>
+	<div class="wpdm-panel">
+		<div class="wpdm-panel-head">
+			<h2><?php esc_html_e( 'Vulnerabilities & Abandoned Plugins', 'wp-dashboard-management' ); ?></h2>
+			<button type="button" class="button" id="wpdm-run-scans">
+				<span class="dashicons dashicons-shield"></span>
+				<?php esc_html_e( 'Scan now', 'wp-dashboard-management' ); ?>
+			</button>
+		</div>
+
+		<?php if ( null !== $vulnerabilities ) { ?>
+			<h3 class="wpdm-subsection-title"><?php esc_html_e( 'Known vulnerabilities', 'wp-dashboard-management' ); ?></h3>
+			<?php if ( ! $vulnerabilities['checked_at'] ) { ?>
+				<p class="wpdm-muted"><?php esc_html_e( 'Not scanned yet. Scans run daily, or click "Scan now".', 'wp-dashboard-management' ); ?></p>
+			<?php } else { ?>
+				<p class="wpdm-muted">
+					<?php
+					/* translators: %s: human time diff */
+					printf( esc_html__( 'Checked %s ago against WPVulnerability.net.', 'wp-dashboard-management' ), esc_html( human_time_diff( $vulnerabilities['checked_at'] ) ) );
+					if ( $vulnerabilities['failed'] ) {
+						echo ' ';
+						/* translators: %d: number of components */
+						printf( esc_html__( '%d component(s) could not be checked.', 'wp-dashboard-management' ), (int) $vulnerabilities['failed'] );
+					}
+					?>
+				</p>
+				<?php if ( empty( $vulnerabilities['items'] ) ) { ?>
+					<div class="wpdm-empty"><p><?php esc_html_e( 'No known vulnerabilities in the installed versions.', 'wp-dashboard-management' ); ?></p></div>
+				<?php } else { ?>
+					<table class="widefat striped wpdm-table">
+						<thead>
+							<tr>
+								<th><?php esc_html_e( 'Component', 'wp-dashboard-management' ); ?></th>
+								<th><?php esc_html_e( 'Issue', 'wp-dashboard-management' ); ?></th>
+								<th><?php esc_html_e( 'Severity', 'wp-dashboard-management' ); ?></th>
+								<th><?php esc_html_e( 'Fixed in', 'wp-dashboard-management' ); ?></th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ( $vulnerabilities['items'] as $item ) { ?>
+								<?php foreach ( $item['vulns'] as $vuln ) { ?>
+									<tr>
+										<td>
+											<strong><?php echo esc_html( $item['name'] ); ?></strong>
+											<div class="wpdm-muted"><?php echo esc_html( $item['type'] . ' ' . $item['version'] ); ?></div>
+										</td>
+										<td class="wpdm-msg">
+											<?php if ( $vuln['link'] ) { ?>
+												<a href="<?php echo esc_url( $vuln['link'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $vuln['title'] ); ?></a>
+											<?php } else { ?>
+												<?php echo esc_html( $vuln['title'] ); ?>
+											<?php } ?>
+										</td>
+										<td>
+											<?php if ( $vuln['severity'] ) { ?>
+												<span class="wpdm-badge wpdm-vuln-<?php echo esc_attr( $vuln['severity'] ); ?>"><?php echo esc_html( $vuln['severity'] ); ?></span>
+											<?php } else { ?>
+												<span class="wpdm-muted">&mdash;</span>
+											<?php } ?>
+										</td>
+										<td>
+											<?php if ( $vuln['fixed_in'] ) { ?>
+												<?php echo esc_html( $vuln['fixed_in'] ); ?>
+											<?php } else { ?>
+												<span class="wpdm-badge wpdm-badge-orange"><?php esc_html_e( 'No fix yet', 'wp-dashboard-management' ); ?></span>
+											<?php } ?>
+										</td>
+									</tr>
+								<?php } ?>
+							<?php } ?>
+						</tbody>
+					</table>
+				<?php } ?>
+			<?php } ?>
+		<?php } ?>
+
+		<?php if ( null !== $abandoned ) { ?>
+			<h3 class="wpdm-subsection-title"><?php esc_html_e( 'Abandoned plugins', 'wp-dashboard-management' ); ?></h3>
+			<?php if ( ! $abandoned['checked_at'] ) { ?>
+				<p class="wpdm-muted"><?php esc_html_e( 'Not scanned yet. Scans run daily, or click "Scan now".', 'wp-dashboard-management' ); ?></p>
+			<?php } elseif ( empty( $abandoned['plugins'] ) ) { ?>
+				<div class="wpdm-empty"><p><?php esc_html_e( 'No closed or abandoned plugins on wordpress.org.', 'wp-dashboard-management' ); ?></p></div>
+			<?php } else { ?>
+				<table class="widefat striped wpdm-table">
+					<thead>
+						<tr>
+							<th><?php esc_html_e( 'Plugin', 'wp-dashboard-management' ); ?></th>
+							<th><?php esc_html_e( 'Status', 'wp-dashboard-management' ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ( $abandoned['plugins'] as $plugin ) { ?>
+							<tr>
+								<td>
+									<strong><?php echo esc_html( $plugin['name'] ); ?></strong>
+									<div class="wpdm-muted"><?php echo esc_html( $plugin['version'] ); ?></div>
+								</td>
+								<td>
+									<span class="wpdm-badge <?php echo 'closed' === $plugin['status'] ? 'wpdm-severity-critical' : 'wpdm-badge-orange'; ?>">
+										<?php echo esc_html( WPDM_Abandoned_Plugins::label( $plugin ) ); ?>
+									</span>
+								</td>
+							</tr>
+						<?php } ?>
+					</tbody>
+				</table>
+			<?php } ?>
+		<?php } ?>
+	</div>
+	<?php } ?>
 
 	<!-- ===== Email reports ===== -->
 	<?php if ( $features['email_reports'] ) : ?>

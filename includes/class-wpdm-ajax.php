@@ -32,6 +32,9 @@ class WPDM_Ajax {
 		add_action( 'wp_ajax_wpdm_site_health_fix', array( __CLASS__, 'site_health_fix' ) );
 		add_action( 'wp_ajax_wpdm_save_report_settings', array( __CLASS__, 'save_report_settings' ) );
 		add_action( 'wp_ajax_wpdm_send_report_now', array( __CLASS__, 'send_report_now' ) );
+		add_action( 'wp_ajax_wpdm_plugin_versions', array( __CLASS__, 'plugin_versions' ) );
+		add_action( 'wp_ajax_wpdm_rollback_plugin', array( __CLASS__, 'rollback_plugin' ) );
+		add_action( 'wp_ajax_wpdm_run_scans', array( __CLASS__, 'run_scans' ) );
 	}
 
 	/**
@@ -340,5 +343,66 @@ class WPDM_Ajax {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
 		}
 		wp_send_json_success( array( 'message' => __( 'Beqlic Activity Log activated.', 'wp-dashboard-management' ) ) );
+	}
+
+	/**
+	 * List installable releases of a plugin.
+	 */
+	public static function plugin_versions() {
+		self::guard( 'plugin_rollback' );
+		if ( ! current_user_can( 'update_plugins' ) ) {
+			wp_send_json_error( array( 'message' => __( 'You are not allowed to update plugins.', 'wp-dashboard-management' ) ), 403 );
+		}
+
+		$file     = isset( $_POST['plugin'] ) ? sanitize_text_field( wp_unslash( $_POST['plugin'] ) ) : '';
+		$versions = WPDM_Plugin_Rollback::versions( $file );
+		if ( is_wp_error( $versions ) ) {
+			wp_send_json_error( array( 'message' => $versions->get_error_message() ) );
+		}
+
+		wp_send_json_success( array( 'versions' => array_map( 'strval', array_keys( $versions ) ) ) );
+	}
+
+	/**
+	 * Install a specific release of a plugin (upgrade or rollback).
+	 */
+	public static function rollback_plugin() {
+		self::guard( 'plugin_rollback' );
+		if ( ! current_user_can( 'update_plugins' ) ) {
+			wp_send_json_error( array( 'message' => __( 'You are not allowed to update plugins.', 'wp-dashboard-management' ) ), 403 );
+		}
+
+		$file    = isset( $_POST['plugin'] ) ? sanitize_text_field( wp_unslash( $_POST['plugin'] ) ) : '';
+		$version = isset( $_POST['version'] ) ? sanitize_text_field( wp_unslash( $_POST['version'] ) ) : '';
+
+		$result = WPDM_Plugin_Rollback::install( $file, $version );
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		}
+
+		/* translators: %s: plugin version */
+		wp_send_json_success( array( 'message' => sprintf( __( 'Version %s installed.', 'wp-dashboard-management' ), $version ) ) );
+	}
+
+	/**
+	 * Run the vulnerability and abandoned-plugin scans now (whichever are enabled).
+	 */
+	public static function run_scans() {
+		// Passes when at least one of the two modules is enabled.
+		self::guard( WPDM_Settings::enabled( 'abandoned' ) ? 'abandoned' : 'vulnerabilities' );
+
+		// One remote request per component; allow more than the default 30s.
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 300 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+		}
+
+		if ( WPDM_Settings::enabled( 'vulnerabilities' ) ) {
+			WPDM_Vulnerabilities::scan();
+		}
+		if ( WPDM_Settings::enabled( 'abandoned' ) ) {
+			WPDM_Abandoned_Plugins::scan();
+		}
+
+		wp_send_json_success( array( 'message' => __( 'Scan complete.', 'wp-dashboard-management' ) ) );
 	}
 }

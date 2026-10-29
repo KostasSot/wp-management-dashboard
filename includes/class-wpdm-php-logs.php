@@ -133,6 +133,29 @@ class WPDM_PHP_Logs {
 	}
 
 	/**
+	 * Severity counts for entries logged since a point in time.
+	 *
+	 * Only the newest MAX_READ_BYTES of the file are considered.
+	 *
+	 * @param int    $since  Unix timestamp.
+	 * @param string $source Log source id (see sources()).
+	 * @return array level => count
+	 */
+	public static function counts_since( $since, $source = 'wpdm' ) {
+		$log    = self::get_entries( PHP_INT_MAX, $source );
+		$counts = array_fill_keys( array_keys( $log['counts'] ), 0 );
+
+		foreach ( $log['entries'] as $entry ) {
+			$time = strtotime( $entry['time'] );
+			if ( $time && $time >= $since ) {
+				$counts[ $entry['level'] ]++;
+			}
+		}
+
+		return $counts;
+	}
+
+	/**
 	 * Parse raw log text into structured entries.
 	 *
 	 * Lines look like: [16-Jul-2026 10:00:00 UTC] PHP Warning:  message in file on line N

@@ -106,6 +106,12 @@ class WPDM_Admin {
 					'newAdminLogin' => __( 'New username for the "admin" account (you stay logged in, password unchanged):', 'wp-dashboard-management' ),
 					'confirmXmlrpc' => __( 'Disable XML-RPC? Jetpack, the WordPress mobile app and remote publishing tools that rely on it will stop working.', 'wp-dashboard-management' ),
 					'confirmIndexing' => __( 'Allow search engines to index this site? Do not do this on staging or development sites.', 'wp-dashboard-management' ),
+					'confirmSalts'    => __( 'Generate new secret keys and salts in wp-config.php? Every user, including you, is logged out immediately.', 'wp-dashboard-management' ),
+					/* translators: 1: plugin version, 2: plugin name */
+					'confirmRollback' => __( 'Install version %1$s of "%2$s" over the current one? Plugin files are replaced; a database snapshot is taken first when snapshots are enabled.', 'wp-dashboard-management' ),
+					'install'         => __( 'Install', 'wp-dashboard-management' ),
+					'current'         => __( 'current', 'wp-dashboard-management' ),
+					'scanning'        => __( 'Scanning — one request per plugin and theme, this can take a minute.', 'wp-dashboard-management' ),
 					'working'      => __( 'Working…', 'wp-dashboard-management' ),
 					'updating'     => __( 'Updating…', 'wp-dashboard-management' ),
 					'updated'      => __( 'Updated to version %s.', 'wp-dashboard-management' ),
@@ -146,6 +152,8 @@ class WPDM_Admin {
 		$report_next     = $features['email_reports'] ? WPDM_Email_Report::next_run() : 0;
 		$health_refresh  = isset( $_GET['wpdm-health'] ) && 'refresh' === $_GET['wpdm-health']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$site_health     = $features['site_health'] ? WPDM_Site_Health::results( $health_refresh ) : array();
+		$vulnerabilities = $features['vulnerabilities'] ? WPDM_Vulnerabilities::results() : null;
+		$abandoned       = $features['abandoned'] ? WPDM_Abandoned_Plugins::results() : null;
 
 		require WPDM_PLUGIN_DIR . 'includes/views/dashboard.php';
 	}
