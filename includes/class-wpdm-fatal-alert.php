@@ -25,8 +25,14 @@ class WPDM_Fatal_Alert {
 	public static function maybe_send( array $error ) {
 		// The site is already failing; the alert must never add a second error.
 		try {
-			if ( ! function_exists( 'wp_mail' ) || ! WPDM_Settings::enabled( 'fatal_alerts' ) || get_transient( self::THROTTLE_KEY ) ) {
+			if ( ! WPDM_Settings::enabled( 'fatal_alerts' ) || get_transient( self::THROTTLE_KEY ) ) {
 				return;
+			}
+
+			// A fatal while plugins load happens before pluggable.php is included.
+			// Its functions are function_exists()-guarded, so this is safe.
+			if ( ! function_exists( 'wp_mail' ) ) {
+				require_once ABSPATH . WPINC . '/pluggable.php';
 			}
 
 			$report = WPDM_Settings::report_settings();

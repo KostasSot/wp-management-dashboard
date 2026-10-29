@@ -22,9 +22,22 @@ class WPDM_Error_Logger {
 	const MAX_FILE_BYTES = 5242880; // 5 MB.
 
 	/**
-	 * Register the error and shutdown handlers.
+	 * Whether the handlers are registered.
+	 *
+	 * @var bool
+	 */
+	private static $initialized = false;
+
+	/**
+	 * Register the error and shutdown handlers (once: the early mu-plugin
+	 * drop-in and plugins_loaded both call this).
 	 */
 	public static function init() {
+		if ( self::$initialized ) {
+			return;
+		}
+		self::$initialized = true;
+
 		set_error_handler( array( __CLASS__, 'handle_error' ) ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions
 		register_shutdown_function( array( __CLASS__, 'handle_shutdown' ) );
 	}

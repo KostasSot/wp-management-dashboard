@@ -114,6 +114,7 @@ Commands respect the module flags: a disabled module errors out.
 | Site transient `wpdm_core_versions` | Cached wordpress.org release list (12 h). |
 | Transient `wpdm_site_health` | Cached Site Health results (15 min). |
 | `uploads/wpdm-logs/` | Plugin PHP error log (+ `.1` rotation). |
+| `mu-plugins/0-wpdm-error-logger.php` | Generated drop-in that starts error logging before regular plugins load. Written on activation (and re-synced on `admin_init`), removed on deactivation. |
 | `uploads/wpdm-backups/` | Database snapshots (`snapshot-<date>-wp<version>[-label].sql`). |
 | `wp-config.php.wpdm-bak` | Backup written before every `wp-config.php` edit. |
 
@@ -136,6 +137,7 @@ Commands respect the module flags: a disabled module errors out.
 - Restore replaces only tables present in the snapshot; tables created after it survive. Restoring an older snapshot on a newer WordPress makes core immediately re-run its DB upgrade.
 - The XLSX export lists **active** plugins with pending updates (inactive ones are excluded by design) and all themes with pending updates.
 - Version switching and snapshot restore are inherently disruptive operations — they're grouped under Power Tools so you can keep them off production sites.
+- The plugin error logger starts from a must-use drop-in, so fatal errors in other plugins' main files (broken updates, PHP upgrades) are logged and emailed too. If `wp-content/mu-plugins/` is not writable, logging starts on `plugins_loaded` instead and those early errors are missed. Errors in WordPress core itself are never caught.
 - The plugin error logger respects `error_reporting()` / `@`-suppression and always lets PHP's normal error handling continue.
 
 ## File structure
@@ -156,6 +158,7 @@ wp-dashboard-management/
 │   ├── class-wpdm-themes-status.php Theme list, updates
 │   ├── class-wpdm-php-logs.php      Log tailing/parsing for both sources
 │   ├── class-wpdm-error-logger.php  Plugin-owned PHP error capture
+│   ├── class-wpdm-early-logger.php  Installs the mu-plugin drop-in that starts it early
 │   ├── class-wpdm-activity-log.php  Beqlic detection/install/activate + chart data
 │   ├── class-wpdm-core-manager.php  wordpress.org release list + core install
 │   ├── class-wpdm-db-backup.php     Snapshot create/list/restore/delete/prune

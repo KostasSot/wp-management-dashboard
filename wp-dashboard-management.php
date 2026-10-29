@@ -41,6 +41,7 @@ if ( ! defined( 'WPDM_BEQLIC_REPO_ZIP' ) ) {
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-settings.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-wizard.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-error-logger.php';
+require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-early-logger.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-system-info.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-plugins-status.php';
 require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-themes-status.php';
@@ -67,6 +68,7 @@ require_once WPDM_PLUGIN_DIR . 'includes/class-wpdm-ajax.php';
  */
 function wpdm_init() {
 	WPDM_Error_Logger::init();
+	WPDM_Early_Logger::init();
 	WPDM_Admin::init();
 	WPDM_Wizard::init();
 	WPDM_Ajax::init();
@@ -86,17 +88,20 @@ function wpdm_init() {
 add_action( 'plugins_loaded', 'wpdm_init' );
 
 /**
- * On activation, flag a one-time redirect to the setup wizard.
+ * On activation, install the early error-logger drop-in and flag a
+ * one-time redirect to the setup wizard.
  */
 function wpdm_activate() {
+	WPDM_Early_Logger::install();
 	set_transient( 'wpdm_activation_redirect', 1, 60 );
 }
 register_activation_hook( __FILE__, 'wpdm_activate' );
 
 /**
- * On deactivation, remove the scheduled events.
+ * On deactivation, remove the scheduled events and the early error-logger drop-in.
  */
 function wpdm_deactivate() {
+	WPDM_Early_Logger::remove();
 	wp_clear_scheduled_hook( 'wpdm_send_report' );
 	wp_clear_scheduled_hook( 'wpdm_vulnerability_scan' );
 	wp_clear_scheduled_hook( 'wpdm_abandoned_scan' );
