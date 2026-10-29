@@ -68,6 +68,7 @@ function wpdm_init() {
 	WPDM_Export::init();
 	WPDM_Updater::init();
 	WPDM_Email_Report::init();
+	WPDM_Security_Check::init();
 }
 add_action( 'plugins_loaded', 'wpdm_init' );
 

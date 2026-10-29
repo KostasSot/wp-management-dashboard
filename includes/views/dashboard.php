@@ -317,6 +317,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 								<span class="wpdm-check-detail"><?php echo esc_html( $check['detail'] ); ?></span>
 							<?php endif; ?>
 						</span>
+						<?php if ( ! $check['pass'] && $check['fixable'] ) { ?>
+							<button type="button" class="button button-small wpdm-fix-btn" data-action="wpdm_security_fix" data-check="<?php echo esc_attr( $check['id'] ); ?>"><?php esc_html_e( 'Fix', 'wp-dashboard-management' ); ?></button>
+						<?php } ?>
 					</li>
 				<?php endforeach; ?>
 			</ul>
@@ -355,6 +358,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 								<strong><?php echo esc_html( $issue['label'] ); ?></strong>
 								<span class="wpdm-check-detail"><?php echo esc_html( wp_trim_words( $issue['description'], 30 ) ); ?></span>
 							</span>
+							<?php if ( ! empty( $issue['fixable'] ) ) { ?>
+								<button type="button" class="button button-small wpdm-fix-btn" data-action="wpdm_site_health_fix" data-check="<?php echo esc_attr( $issue['test'] ); ?>"><?php esc_html_e( 'Fix', 'wp-dashboard-management' ); ?></button>
+							<?php } ?>
 						</li>
 					<?php endforeach; ?>
 				</ul>

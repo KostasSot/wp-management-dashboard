@@ -15,5 +15,6 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 
 delete_option( 'wpdm_settings' );
 delete_option( 'wpdm_debug_log_path' );
+delete_option( 'wpdm_disable_xmlrpc' );
 delete_site_transient( 'wpdm_core_versions' );
 delete_transient( 'wpdm_activation_redirect' );

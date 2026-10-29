@@ -160,6 +160,45 @@
 		} );
 	}
 
+	/* ===== Security check / Site Health fixes ===== */
+
+	var FIX_CONFIRMS = {
+		xmlrpc: wpdmData.i18n.confirmXmlrpc,
+		search_engine_visibility: wpdmData.i18n.confirmIndexing
+	};
+
+	document.querySelectorAll( '.wpdm-fix-btn' ).forEach( function ( btn ) {
+		btn.addEventListener( 'click', function () {
+			var extra = { check: btn.dataset.check };
+			if ( 'admin_user' === btn.dataset.check ) {
+				var login = window.prompt( wpdmData.i18n.newAdminLogin );
+				if ( ! login ) {
+					return;
+				}
+				extra.new_login = login.trim();
+			}
+			if ( FIX_CONFIRMS[ btn.dataset.check ] && ! window.confirm( FIX_CONFIRMS[ btn.dataset.check ] ) ) {
+				return;
+			}
+			btn.disabled = true;
+			btn.textContent = wpdmData.i18n.working;
+			post(
+				btn.dataset.action,
+				function ( json ) {
+					var m = json.data && json.data.message ? json.data.message : wpdmData.i18n.error;
+					notice( m, json.success ? 'success' : 'error' );
+					if ( json.success ) {
+						window.location.reload();
+						return;
+					}
+					btn.disabled = false;
+					btn.textContent = wpdmData.i18n.error;
+				},
+				extra
+			);
+		} );
+	} );
+
 	/* ===== Snapshot restore / delete ===== */
 
 	document.querySelectorAll( '.wpdm-restore-backup-btn' ).forEach( function ( btn ) {

@@ -51,7 +51,7 @@ class WPDM_Settings {
 			),
 			'security'     => array(
 				'label'       => __( 'Security Health Check', 'wp-dashboard-management' ),
-				'description' => __( 'Read-only hardening checklist: HTTPS, file editing, admin username, insecure core versions, and more.', 'wp-dashboard-management' ),
+				'description' => __( 'Hardening checklist with one-click fixes: HTTPS, file editing, admin username, insecure core versions, and more.', 'wp-dashboard-management' ),
 				'group'       => 'monitoring',
 			),
 			'site_health'  => array(

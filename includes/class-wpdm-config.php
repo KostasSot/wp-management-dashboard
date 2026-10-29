@@ -19,7 +19,7 @@ class WPDM_Config {
 	 *
 	 * @var string[]
 	 */
-	const ALLOWED = array( 'WP_DEBUG', 'WP_DEBUG_LOG', 'WP_DEBUG_DISPLAY' );
+	const ALLOWED = array( 'WP_DEBUG', 'WP_DEBUG_LOG', 'WP_DEBUG_DISPLAY', 'DISALLOW_FILE_EDIT' );
 
 	/**
 	 * Locate wp-config.php (it may live one level above ABSPATH).

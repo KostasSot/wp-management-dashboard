@@ -103,6 +103,9 @@ class WPDM_Admin {
 					/* translators: %s: snapshot filename */
 					'confirmDeleteBackup' => __( 'Delete snapshot "%s"? This cannot be undone.', 'wp-dashboard-management' ),
 					'installingCoreLong' => __( 'Downloading and installing WordPress — this can take a minute, do not close the page.', 'wp-dashboard-management' ),
+					'newAdminLogin' => __( 'New username for the "admin" account (you stay logged in, password unchanged):', 'wp-dashboard-management' ),
+					'confirmXmlrpc' => __( 'Disable XML-RPC? Jetpack, the WordPress mobile app and remote publishing tools that rely on it will stop working.', 'wp-dashboard-management' ),
+					'confirmIndexing' => __( 'Allow search engines to index this site? Do not do this on staging or development sites.', 'wp-dashboard-management' ),
 					'working'      => __( 'Working…', 'wp-dashboard-management' ),
 					'updating'     => __( 'Updating…', 'wp-dashboard-management' ),
 					'updated'      => __( 'Updated to version %s.', 'wp-dashboard-management' ),

@@ -28,6 +28,8 @@ class WPDM_Ajax {
 		add_action( 'wp_ajax_wpdm_restore_backup', array( __CLASS__, 'restore_backup' ) );
 		add_action( 'wp_ajax_wpdm_delete_backup', array( __CLASS__, 'delete_backup' ) );
 		add_action( 'wp_ajax_wpdm_toggle_debug', array( __CLASS__, 'toggle_debug' ) );
+		add_action( 'wp_ajax_wpdm_security_fix', array( __CLASS__, 'security_fix' ) );
+		add_action( 'wp_ajax_wpdm_site_health_fix', array( __CLASS__, 'site_health_fix' ) );
 		add_action( 'wp_ajax_wpdm_save_report_settings', array( __CLASS__, 'save_report_settings' ) );
 		add_action( 'wp_ajax_wpdm_send_report_now', array( __CLASS__, 'send_report_now' ) );
 	}
@@ -152,6 +154,7 @@ class WPDM_Ajax {
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
 		}
+		delete_transient( WPDM_Site_Health::CACHE_KEY );
 
 		$message = $on
 			? __( 'Debug mode enabled — PHP errors are now written to a private debug log.', 'wp-dashboard-management' )
@@ -162,6 +165,42 @@ class WPDM_Ajax {
 		}
 
 		wp_send_json_success( array( 'message' => $message ) );
+	}
+
+	/**
+	 * Apply the one-click fix for a failing security check.
+	 */
+	public static function security_fix() {
+		self::guard( 'security' );
+
+		$id   = isset( $_POST['check'] ) ? sanitize_key( wp_unslash( $_POST['check'] ) ) : '';
+		$args = array(
+			'new_login' => isset( $_POST['new_login'] ) ? sanitize_user( wp_unslash( $_POST['new_login'] ), true ) : '',
+		);
+
+		$result = WPDM_Security_Check::fix( $id, $args );
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		}
+
+		// Some fixes (e.g. WP_DEBUG_DISPLAY) change core Site Health results too.
+		delete_transient( WPDM_Site_Health::CACHE_KEY );
+		wp_send_json_success( array( 'message' => $result ) );
+	}
+
+	/**
+	 * Apply the one-click fix for a failing core Site Health test.
+	 */
+	public static function site_health_fix() {
+		self::guard( 'site_health' );
+
+		$test   = isset( $_POST['check'] ) ? sanitize_key( wp_unslash( $_POST['check'] ) ) : '';
+		$result = WPDM_Site_Health::fix( $test );
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+		}
+
+		wp_send_json_success( array( 'message' => __( 'Fixed. Site Health tests will re-run on reload.', 'wp-dashboard-management' ) ) );
 	}
 
 	/**
