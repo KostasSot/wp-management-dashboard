@@ -153,13 +153,15 @@ class WPDM_Ajax {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
 		}
 
-		wp_send_json_success(
-			array(
-				'message' => $on
-					? __( 'Debug mode enabled — PHP errors are now written to the debug log.', 'wp-dashboard-management' )
-					: __( 'Debug mode disabled.', 'wp-dashboard-management' ),
-			)
-		);
+		$message = $on
+			? __( 'Debug mode enabled — PHP errors are now written to a private debug log.', 'wp-dashboard-management' )
+			: __( 'Debug mode disabled.', 'wp-dashboard-management' );
+
+		if ( $on && is_file( WPDM_Config::public_debug_log_path() ) ) {
+			$message .= ' ' . __( 'An old wp-content/debug.log is still publicly downloadable — delete it from the server.', 'wp-dashboard-management' );
+		}
+
+		wp_send_json_success( array( 'message' => $message ) );
 	}
 
 	/**

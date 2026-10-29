@@ -40,11 +40,20 @@ class WPDM_Error_Logger {
 
 		if ( ! is_dir( $dir ) ) {
 			wp_mkdir_p( $dir );
-			@file_put_contents( $dir . '/.htaccess', "Deny from all\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions, WordPress.PHP.NoSilencedErrors
-			@file_put_contents( $dir . '/index.php', "<?php\n// Silence is golden.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions, WordPress.PHP.NoSilencedErrors
+			self::protect_dir( $dir );
 		}
 
 		return $dir;
+	}
+
+	/**
+	 * Block direct web access to a directory (Apache; Nginx ignores .htaccess).
+	 *
+	 * @param string $dir Existing directory.
+	 */
+	public static function protect_dir( $dir ) {
+		@file_put_contents( $dir . '/.htaccess', "Deny from all\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions, WordPress.PHP.NoSilencedErrors
+		@file_put_contents( $dir . '/index.php', "<?php\n// Silence is golden.\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions, WordPress.PHP.NoSilencedErrors
 	}
 
 	/**
