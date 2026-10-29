@@ -24,6 +24,22 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<?php endif; ?>
 	</div>
 
+	<?php if ( ! $early_logger_ok ) { ?>
+		<?php // "inline" keeps core from moving it, and it sits outside #wpdm-notices so AJAX messages don't clear it. ?>
+		<div class="notice notice-warning inline">
+			<p>
+				<strong><?php esc_html_e( 'Early error logging is off.', 'wp-dashboard-management' ); ?></strong>
+				<?php
+				printf(
+					/* translators: %s: drop-in file path */
+					esc_html__( 'The drop-in %s could not be written, so fatal errors in other plugins\' main files (for example after a broken update) are not logged or emailed. Make wp-content/mu-plugins writable by the web server, or remove a file with the same name that this plugin did not create, then reload this page.', 'wp-dashboard-management' ),
+					'<code>' . esc_html( WPDM_Early_Logger::path() ) . '</code>'
+				);
+				?>
+			</p>
+		</div>
+	<?php } ?>
+
 	<!-- ===== Stat cards ===== -->
 	<div class="wpdm-cards">
 		<div class="wpdm-card <?php echo $system['wp_needs_update'] ? 'is-warning' : 'is-good'; ?>">

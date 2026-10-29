@@ -154,6 +154,8 @@ class WPDM_Admin {
 		$site_health     = $features['site_health'] ? WPDM_Site_Health::results( $health_refresh ) : array();
 		$vulnerabilities = $features['vulnerabilities'] ? WPDM_Vulnerabilities::results() : null;
 		$abandoned       = $features['abandoned'] ? WPDM_Abandoned_Plugins::results() : null;
+		// admin_init already tried to install it, so this reflects that attempt.
+		$early_logger_ok = WPDM_Early_Logger::is_current();
 
 		require WPDM_PLUGIN_DIR . 'includes/views/dashboard.php';
 	}

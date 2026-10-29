@@ -56,6 +56,16 @@ class WPDM_Early_Logger {
 	}
 
 	/**
+	 * Whether the drop-in is in place and matches the current code.
+	 *
+	 * @return bool
+	 */
+	public static function is_current() {
+		$path = self::path();
+		return is_file( $path ) && file_get_contents( $path ) === self::code(); // phpcs:ignore WordPress.WP.AlternativeFunctions
+	}
+
+	/**
 	 * Write the drop-in unless it is already current or the file is not ours.
 	 *
 	 * @return bool Whether the drop-in is in place and current.
