@@ -4,7 +4,7 @@ A modular site-management dashboard for WordPress. One admin screen ("Management
 
 Every module is optional. A setup wizard lets you choose per site which modules are enabled, so a client site can run a slim read-only dashboard while your dev box gets the full toolkit.
 
-- **Version:** 1.3.0
+- **Version:** 1.3.1
 - **Author:** Konstantinos Sotiriou
 - **Requires:** WordPress 5.8+, PHP 7.4+
 - **License:** GPL-2.0-or-later
